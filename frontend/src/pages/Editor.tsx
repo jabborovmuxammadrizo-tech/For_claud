@@ -5,6 +5,7 @@ import {
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { navigate, Route } from "../App";
 import { api, Asset, Block, Doc, DocModel, fileUrl, Issue, Job, pollJob, Preview, Template, upload } from "../api";
+import { ExportDialog } from "../components/ExportDialog";
 import { IssueList, JobTimeline, LogTail, ResultPanel } from "../components/job";
 import { PdfPage, usePdf } from "../components/PdfViewer";
 import {
@@ -95,6 +96,7 @@ function DocumentEditor({ id, route }: { id: string; route: Route }) {
   const [zoom, setZoom] = useState(1.0);
   const [save, setSave] = useState<{ state: "saved" | "dirty" | "saving" | "error"; at?: number }>({ state: "saved" });
   const [genJob, setGenJob] = useState<Job | null>(null);
+  const [exportOpen, setExportOpen] = useState(false);
   const [families, setFamilies] = useState<string[]>([]);
   const undo = useRef<string[]>([]);
   const redo = useRef<string[]>([]);
@@ -350,6 +352,7 @@ function DocumentEditor({ id, route }: { id: string; route: Route }) {
             {preview.summary.critical ? `${preview.summary.critical} critical` : preview.summary.warning ? `${preview.summary.warning} warnings` : "Checks passed"}
           </Badge>
         )}
+        <Button variant="secondary" onClick={async () => { if (save.state === "dirty") await saveNow(false); setExportOpen(true); }}>Export…</Button>
         <Button variant="primary" icon={<Zap className="h-4 w-4" />} onClick={() => generate(false)}>Generate PDF</Button>
       </div>
 
@@ -455,6 +458,7 @@ function DocumentEditor({ id, route }: { id: string; route: Route }) {
         </div>
       </div>
 
+      <ExportDialog open={exportOpen} onClose={() => setExportOpen(false)} documentId={id} templateId={tid} title={model.title} blocks={model.blocks} />
       <Modal open={!!genJob} onClose={() => { if (genJob && !["queued", "running"].includes(genJob.status)) setGenJob(null); }} title="Generate PDF" width="max-w-4xl">
         {genJob && (["queued", "running"].includes(genJob.status) || genJob.status === "failed") && <><JobTimeline job={genJob} /><LogTail job={genJob} /></>}
         {genJob && genJob.result && genJob.status !== "failed" && <ResultPanel job={genJob} templates={templates} onRegenerate={() => generate(true)} />}
