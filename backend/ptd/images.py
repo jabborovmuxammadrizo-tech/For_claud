@@ -20,6 +20,17 @@ QUALITY = {
 }
 
 
+def _publish(tmp: Path, out: Path) -> None:
+    """Move a finished cache file into place. On Windows the target may be open in another job
+    (renaming over an open file is refused); the cached content is identical, so keep the existing one."""
+    try:
+        os.replace(tmp, out)
+    except OSError:
+        if not out.exists():
+            raise
+        tmp.unlink(missing_ok=True)
+
+
 @locked
 def probe(path: Path) -> dict:
     if path.suffix.lower() == ".svg":
@@ -67,11 +78,11 @@ def prepare_for_pdf(src: Path, cache_dir: Path, display_w_pt: float, display_h_p
                 work = work.convert("RGB" if not grayscale else "L")
             tmp = out.with_name(f"{out.stem}.{threading.get_ident()}.tmp")
             work.save(tmp, "JPEG", quality=q["jpeg"], optimize=True, dpi=(q["dpi"], q["dpi"]))
-            os.replace(tmp, out)
+            _publish(tmp, out)
         else:
             tmp = out.with_name(f"{out.stem}.{threading.get_ident()}.tmp")
             work.save(tmp, "PNG", optimize=quality == "compressed")
-            os.replace(tmp, out)
+            _publish(tmp, out)
         return out, info
 
 
@@ -88,7 +99,7 @@ def svg_to_png(src: Path, cache_dir: Path, w_pt: float, h_pt: float, dpi: int = 
     # write-then-rename: concurrent jobs share this cache and must never read a half-written file
     tmp = out.with_name(f"{out.stem}.{threading.get_ident()}.tmp.png")
     page.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom), alpha=True).save(tmp)
-    os.replace(tmp, out)
+    _publish(tmp, out)
     return out
 
 

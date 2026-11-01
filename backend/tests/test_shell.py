@@ -87,7 +87,7 @@ def test_batch_failure_does_not_stop_others(svc, fx, tmp_path, out):
     bad = tmp_path / "broken.pdf"
     bad.write_bytes(b"%PDF-1.4 not really")
     b = wait_task(svc, SH.run(svc, "batch-generate", [str(fx["one_page"][0]), str(bad), str(fx["txt_exam"][0])]))
-    assert sorted(j["status"] for j in b["jobs"]) == ["failed", "succeeded", "succeeded"]
+    assert sorted(j["status"] for j in b["jobs"]) == ["failed", "succeeded", "succeeded"], [(j["source_name"], j["status"], j["error"]) for j in b["jobs"]]
 
 
 def test_pdf_operations(svc, fx, out):
