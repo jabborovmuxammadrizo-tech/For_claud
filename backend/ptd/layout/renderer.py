@@ -378,26 +378,6 @@ class OpacityImage(RLImage):
             super().draw()
 
 
-class SvgFlowable(Flowable):
-    def __init__(self, drawing, w, h, align="CENTER"):
-        super().__init__()
-        self.d, self.w, self.h = drawing, w, h
-        self.hAlign = align
-        self._ptd_image = True
-
-    def wrap(self, aW, aH):
-        return self.w, self.h
-
-    def draw(self):
-        from reportlab.graphics import renderPDF
-        sx = self.w / max(self.d.width, 1)
-        sy = self.h / max(self.d.height, 1)
-        self.canv.saveState()
-        self.canv.scale(sx, sy)
-        renderPDF.draw(self.d, self.canv, 0, 0)
-        self.canv.restoreState()
-
-
 # ====================================================================== builders
 class Builder:
     def __init__(self, ctx: Ctx):
@@ -418,13 +398,8 @@ class Builder:
         st = st or {}
         flags = c.repairs.get(bid, set())
         shrink = 0.8 ** sum(1 for f in flags if f == "shrink_image") if "shrink_image" in flags else 1.0
-        if path.suffix.lower() == ".svg":
-            from svglib.svglib import svg2rlg
-            d = svg2rlg(str(path))
-            iw, ih = d.width or 100, d.height or 100
-        else:
-            info = imgs.probe(path)
-            iw, ih = info["width"] or 1, info["height"] or 1
+        info = imgs.probe(path)
+        iw, ih = info["width"] or 1, info["height"] or 1
         aspect = iw / ih
         if st.get("width_mm"):
             w = float(st["width_mm"]) * mm
@@ -441,16 +416,13 @@ class Builder:
             h = max_h * shrink
             w = h * aspect
         align = (st.get("align") or self.t["images"]["align"]).upper()
-        if path.suffix.lower() == ".svg":
-            fl = SvgFlowable(d, w, h, align)
-        else:
-            prepared, pinfo = imgs.prepare_for_pdf(path, c.cache, w, h, c.quality, c.gray)
-            fl = OpacityImage(str(prepared), width=w, height=h, opacity=float(st.get("opacity", 1) or 1),
-                              min_frac=1.0 if st.get("width_mm") else min_frac)
-            fl.hAlign = align
-            if pinfo["effective_dpi"] < 110 and w > 60 * mm:
-                c.issues.append({"level": "warning", "code": "low_resolution_image", "block": bid,
-                                 "message": f"Image resolution is low ({pinfo['effective_dpi']} dpi at printed size); it may look blurry."})
+        prepared, pinfo = imgs.prepare_for_pdf(path, c.cache, w, h, c.quality, c.gray)
+        fl = OpacityImage(str(prepared), width=w, height=h, opacity=float(st.get("opacity", 1) or 1),
+                          min_frac=1.0 if st.get("width_mm") else min_frac)
+        fl.hAlign = align
+        if path.suffix.lower() != ".svg" and pinfo["effective_dpi"] < 110 and w > 60 * mm:
+            c.issues.append({"level": "warning", "code": "low_resolution_image", "block": bid,
+                             "message": f"Image resolution is low ({pinfo['effective_dpi']} dpi at printed size); it may look blurry."})
         return fl
 
     # ---- blocks
@@ -695,13 +667,8 @@ class Furniture:
         p = Path(p)
         pad = 0.12 if badge else 0.0
         inner_w, inner_h = max_w * (1 - 2 * pad), max_h * (1 - 2 * pad)
-        if p.suffix.lower() == ".svg":
-            from svglib.svglib import svg2rlg
-            d = svg2rlg(str(p))
-            iw, ih = max(d.width, 1), max(d.height, 1)
-        else:
-            info = imgs.probe(p)
-            iw, ih = max(info["width"], 1), max(info["height"], 1)
+        info = imgs.probe(p)
+        iw, ih = max(info["width"], 1), max(info["height"], 1)
         s = min(inner_w / iw, inner_h / ih)
         w, h = iw * s, ih * s
         bw, bh = (w / (1 - 2 * pad), h / (1 - 2 * pad)) if badge else (w, h)
@@ -717,16 +684,8 @@ class Furniture:
                 canv.roundRect(bx, by, bw, bh, min(bw, bh) * 0.18, stroke=0, fill=1)
             canv.restoreState()
         lx, ly = bx + (bw - w) / 2, by + (bh - h) / 2
-        if p.suffix.lower() == ".svg":
-            from reportlab.graphics import renderPDF
-            canv.saveState()
-            canv.translate(lx, ly)
-            canv.scale(s, s)
-            renderPDF.draw(d, canv, 0, 0)
-            canv.restoreState()
-            return bw
         prepared, pinfo = imgs.prepare_for_pdf(p, self.c.cache, w, h, self.c.quality, self.c.gray)
-        if pinfo["effective_dpi"] < 150 and not any(i["code"] == "low_resolution_logo" for i in self.c.issues):
+        if p.suffix.lower() != ".svg" and pinfo["effective_dpi"] < 150 and not any(i["code"] == "low_resolution_logo" for i in self.c.issues):
             self.c.issues.append({"level": "warning", "code": "low_resolution_logo",
                                   "message": f"The logo is low resolution ({pinfo['effective_dpi']} dpi at printed size). Upload a larger PNG or an SVG for sharp printing."})
         canv.drawImage(str(prepared), lx, ly, w, h, mask="auto")
@@ -738,8 +697,9 @@ class Furniture:
         if pg.get("color"):
             canv.setFillColor(hex_color(pg["color"], c.gray))
             canv.rect(0, 0, c.W, c.H, stroke=0, fill=1)
-        if pg.get("image_asset"):
-            p = c.resolve(pg["image_asset"])
+        bg_asset = pg.get("image_asset") or self.t["branding"].get("background_asset")
+        if bg_asset:
+            p = c.resolve(bg_asset)
             if p and Path(p).exists():
                 prepared, _ = imgs.prepare_for_pdf(Path(p), c.cache, c.W, c.H, c.quality, c.gray)
                 canv.saveState()
@@ -763,13 +723,12 @@ class Furniture:
         if wm.get("type") == "image" and wm.get("asset"):
             p = c.resolve(wm["asset"])
             if p and Path(p).exists():
-                info = imgs.probe(Path(p)) if Path(p).suffix.lower() != ".svg" else {"width": 1, "height": 1}
+                info = imgs.probe(Path(p))
                 size = min(c.W, c.H) * 0.6
                 s = size / max(info["width"], info["height"], 1)
                 w, h = info["width"] * s, info["height"] * s
-                if Path(p).suffix.lower() != ".svg":
-                    prepared, _ = imgs.prepare_for_pdf(Path(p), c.cache, w, h, "standard", c.gray)
-                    canv.drawImage(str(prepared), -w / 2, -h / 2, w, h, mask="auto")
+                prepared, _ = imgs.prepare_for_pdf(Path(p), c.cache, w, h, "standard", c.gray)
+                canv.drawImage(str(prepared), -w / 2, -h / 2, w, h, mask="auto")
         else:
             text = wm.get("text") or self.t["branding"]["org_name"]
             size = float(wm.get("size", 54))
@@ -1004,7 +963,7 @@ def _overlays(ctx: Ctx, canv, page: int):
             canv.translate(-(x + w / 2), -(ry + h / 2))
         if ov.get("type") == "image" and ov.get("asset"):
             p = ctx.resolve(ov["asset"])
-            if p and Path(p).exists() and Path(p).suffix.lower() != ".svg":
+            if p and Path(p).exists():
                 prepared, _ = imgs.prepare_for_pdf(Path(p), ctx.cache, w, h, ctx.quality, ctx.gray)
                 canv.drawImage(str(prepared), x, ry, w, h, preserveAspectRatio=True, anchor="c", mask="auto")
             else:

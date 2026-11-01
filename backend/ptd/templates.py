@@ -16,7 +16,12 @@ DEFAULT_BRANDING = {
     "teacher_name": "",
     "exam_title": "",
     "contact": "",
+    "background_asset": None,
 }
+
+# branding fields a linked branding profile provides (colours only when the template inherits them)
+IDENTITY_KEYS = ("org_name", "logo_asset", "secondary_logo_asset", "watermark", "header_text", "footer_text",
+                 "teacher_name", "exam_title", "contact", "background_asset")
 
 DEFAULT_TEMPLATE = {
     "schema": 1,

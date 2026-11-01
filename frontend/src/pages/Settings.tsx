@@ -1,6 +1,7 @@
 import { Archive, FolderOpen, RefreshCw, RotateCcw } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import type { Route } from "../App";
+import Integration from "./Integration";
 import { api } from "../api";
 import { Badge, Button, Card, errMsg, Field, fmtBytes, fmtDate, NumberInput, SectionTitle, Select, Spinner, TextInput, Toggle, useDialogs, useToast } from "../components/ui";
 
@@ -16,6 +17,7 @@ export default function SettingsPage(_: { route: Route }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [version, setVersion] = useState<string>("");
   const [upd, setUpd] = useState<string | null>(null);
+  const [tab, setTab] = useState<"general" | "windows">(_.route.params.get("tab") === "windows" ? "windows" : "general");
   const load = useCallback(async () => {
     const [a, b, c, h] = await Promise.all([api<S>("/api/settings"), api("/api/info"), api("/api/backups"), api("/api/history?limit=60")]);
     setS(a); setInfo(b); setBackups(c); setHistory(h);
@@ -28,7 +30,12 @@ export default function SettingsPage(_: { route: Route }) {
   return (
     <div>
       <SectionTitle title="Settings" subtitle="Everything runs offline on this computer." />
-      <div className="grid grid-cols-2 gap-6">
+      <div className="flex gap-1 mb-5 border-b border-slate-200">
+        {([["general", "General"], ["windows", "Windows Integration"]] as const).map(([k, l]) => (
+          <button key={k} onClick={() => setTab(k)} className={`px-4 py-2 text-sm font-medium -mb-px border-b-2 ${tab === k ? "border-royal-600 text-royal-700" : "border-transparent text-slate-500 hover:text-navy-900"}`}>{l}</button>
+        ))}
+      </div>
+      {tab === "windows" ? <Integration /> : <div className="grid grid-cols-2 gap-6">
         <Card className="p-6 space-y-3">
           <div className="font-semibold text-navy-900 mb-1">Processing</div>
           <Toggle label="OCR for scanned pages (bundled, offline)" checked={s.ocr_enabled} onChange={(v) => put({ ocr_enabled: v })} hint="Recognises text on scanned pages. Results are always marked for proofreading." />
@@ -109,7 +116,7 @@ export default function SettingsPage(_: { route: Route }) {
             </table>
           </div>
         </Card>
-      </div>
+      </div>}
     </div>
   );
 }

@@ -2,9 +2,12 @@
 from __future__ import annotations
 
 import hashlib
+import os
+import threading
 from io import BytesIO
 from pathlib import Path
 
+import pymupdf
 from PIL import Image, ImageOps
 
 Image.MAX_IMAGE_PIXELS = 200_000_000
@@ -19,11 +22,10 @@ QUALITY = {
 def probe(path: Path) -> dict:
     if path.suffix.lower() == ".svg":
         try:
-            from svglib.svglib import svg2rlg
-            d = svg2rlg(str(path))
-            return {"width": int(d.width), "height": int(d.height), "format": "SVG", "mode": "vector", "dpi": None}
-        except Exception:
-            return {"width": 0, "height": 0, "format": "SVG", "mode": "vector", "dpi": None}
+            r = pymupdf.open(path)[0].rect
+            return {"width": int(r.width), "height": int(r.height), "format": "SVG", "mode": "vector", "dpi": None}
+        except Exception as e:
+            raise ValueError(f"unreadable SVG ({e})") from e
     with Image.open(path) as im:
         dpi = im.info.get("dpi", (None, None))[0]
         return {"width": im.width, "height": im.height, "format": im.format, "mode": im.mode,
@@ -34,6 +36,8 @@ def prepare_for_pdf(src: Path, cache_dir: Path, display_w_pt: float, display_h_p
                     quality: str = "print", grayscale: bool = False) -> tuple[Path, dict]:
     """Downsample to the target DPI for the displayed size (never upsample), convert colour space."""
     q = QUALITY.get(quality, QUALITY["print"])
+    if src.suffix.lower() == ".svg":
+        src = svg_to_png(src, cache_dir, display_w_pt, display_h_pt)
     key = hashlib.sha1(f"{src}:{src.stat().st_mtime_ns}:{display_w_pt:.1f}:{display_h_pt:.1f}:{quality}:{grayscale}".encode()).hexdigest()
     with Image.open(src) as im:
         im = ImageOps.exif_transpose(im)
@@ -59,10 +63,30 @@ def prepare_for_pdf(src: Path, cache_dir: Path, display_w_pt: float, display_h_p
         if ext == ".jpg":
             if work.mode in ("RGBA", "LA"):
                 work = work.convert("RGB" if not grayscale else "L")
-            work.save(out, "JPEG", quality=q["jpeg"], optimize=True, dpi=(q["dpi"], q["dpi"]))
+            tmp = out.with_name(f"{out.stem}.{threading.get_ident()}.tmp")
+            work.save(tmp, "JPEG", quality=q["jpeg"], optimize=True, dpi=(q["dpi"], q["dpi"]))
+            os.replace(tmp, out)
         else:
-            work.save(out, "PNG", optimize=quality == "compressed")
+            tmp = out.with_name(f"{out.stem}.{threading.get_ident()}.tmp")
+            work.save(tmp, "PNG", optimize=quality == "compressed")
+            os.replace(tmp, out)
         return out, info
+
+
+def svg_to_png(src: Path, cache_dir: Path, w_pt: float, h_pt: float, dpi: int = 600) -> Path:
+    """Rasterise an SVG with MuPDF at print resolution (keeps transparency)."""
+    key = hashlib.sha1(f"svg:{src}:{src.stat().st_mtime_ns}:{w_pt:.1f}:{h_pt:.1f}:{dpi}".encode()).hexdigest()
+    out = cache_dir / f"{key}.png"
+    if out.exists():
+        return out
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    page = pymupdf.open("pdf", pymupdf.open(src).convert_to_pdf())[0]
+    zoom = max(w_pt / page.rect.width, h_pt / page.rect.height) * dpi / 72
+    # write-then-rename: concurrent jobs share this cache and must never read a half-written file
+    tmp = out.with_name(f"{out.stem}.{threading.get_ident()}.tmp.png")
+    page.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom), alpha=True).save(tmp)
+    os.replace(tmp, out)
+    return out
 
 
 def edit(src: Path, ops: dict) -> bytes:

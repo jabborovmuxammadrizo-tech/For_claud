@@ -28,11 +28,24 @@ class Service:
         self.paths = paths
         self.db = DB(paths.db)
         self.store = Store(self.db, paths)
+        self._backup_before_upgrade()
         self.store.seed()
         self.pool = ThreadPoolExecutor(max_workers=workers, thread_name_prefix="ptd-job")
         self._preview_lock = threading.Lock()
+        self.cancel_requests: set[str] = set()
         F.set_custom_fonts(self.store.fonts())
         self._recover_interrupted()
+
+    def _backup_before_upgrade(self):
+        """A new application version backs up the user's data before touching it."""
+        from . import __version__
+        prev = self.db.get_setting("app_version")
+        if prev and prev != __version__:
+            try:
+                B.create_backup(self.db, self.paths, f"before-upgrade-{prev}")
+            except Exception:
+                log.exception("Pre-upgrade backup failed")
+        self.db.set_setting("app_version", __version__)
 
     def close(self):
         self.pool.shutdown(wait=False, cancel_futures=True)
@@ -54,7 +67,8 @@ class Service:
     # ------------------------------------------------------------------ jobs
     def _submit(self, job_id: str):
         job = self.db.get("jobs", job_id)
-        fn = {"generate": P.run_generate, "extract": P.run_extract}[job["kind"]]
+        from . import shell as SH
+        fn = {"generate": P.run_generate, "extract": P.run_extract, "op": SH.run_op}[job["kind"]]
 
         def runner():
             j = self.db.get("jobs", job_id)
@@ -86,13 +100,32 @@ class Service:
         self._submit(jid)
         return self.db.get("jobs", jid)
 
+    def create_op_job(self, op: str, path: Path, batch_id: str | None, options: dict | None = None) -> dict:
+        jid = new_id("job_")
+        self.db.insert("jobs", {"id": jid, "kind": "op", "status": "queued", "document_id": None, "template_id": None,
+                                "batch_id": batch_id, "idem_key": None,
+                                "options": {**(options or {}), "op": op, "path": str(path), "name": path.name},
+                                "steps": [], "progress": 0, "attempts": 0, "created": now()})
+        self._submit(jid)
+        return self.db.get("jobs", jid)
+
+    def cancel_batch(self, bid: str) -> dict:
+        b = self.batch(bid)
+        for j in b["jobs"]:
+            if j["status"] == "queued":
+                self.db.update("jobs", j["id"], {"status": "cancelled", "error": "Cancelled by the user.", "finished": now()})
+            elif j["status"] == "running":
+                self.cancel_requests.add(j["id"])
+        return self.batch(bid)
+
     def retry_job(self, job_id: str) -> dict:
         j = self.db.get("jobs", job_id)
         if not j:
             raise NotFound(job_id)
         if j["status"] in ("queued", "running"):
             return j
-        steps = P.initial_steps() if j["kind"] == "generate" else [s for s in P.initial_steps() if s["key"] in ("analyze", "extract")]
+        steps = P.initial_steps() if j["kind"] == "generate" else [] if j["kind"] == "op" else \
+            [s for s in P.initial_steps() if s["key"] in ("analyze", "extract")]
         self.db.update("jobs", job_id, {"status": "queued", "steps": steps, "progress": 0, "error": None, "result": None,
                                         "started": None, "finished": None})
         self.db.execute("INSERT INTO job_log (job_id, ts, level, message) VALUES (?,?,?,?)", (job_id, now(), "info", "Retry requested"))
@@ -158,14 +191,15 @@ class Service:
         for jid in b["job_ids"] or []:
             j = self.db.get("jobs", jid)
             if j:
-                d = self.db.get("documents", j["document_id"])
-                jobs.append({"id": j["id"], "status": j["status"], "progress": j["progress"], "error": j["error"],
-                             "document_id": j["document_id"], "title": d["title"] if d else "", "source_name": d["source_name"] if d else "",
+                d = self.db.get("documents", j["document_id"]) if j["document_id"] else None
+                name = d["source_name"] if d else (j["options"] or {}).get("name", "")
+                jobs.append({"id": j["id"], "kind": j["kind"], "status": j["status"], "progress": j["progress"], "error": j["error"],
+                             "document_id": j["document_id"], "title": d["title"] if d else Path(name).stem, "source_name": name,
                              "steps": j["steps"], "result": j["result"]})
         b["jobs"] = jobs
         done = [j for j in jobs if j["status"] not in ("queued", "running")]
         b["progress"] = round(sum(1 if j["status"] not in ("queued", "running") else j["progress"] for j in jobs) / max(1, len(jobs)), 4)
-        b["counts"] = {s: sum(1 for j in jobs if j["status"] == s) for s in ("queued", "running", "succeeded", "needs_review", "failed")}
+        b["counts"] = {s: sum(1 for j in jobs if j["status"] == s) for s in ("queued", "running", "succeeded", "needs_review", "failed", "cancelled")}
         b["finished"] = len(done) == len(jobs)
         tpl = self.db.get("templates", b["template_id"])
         b["template_name"] = tpl["name"] if tpl else ""
@@ -184,7 +218,8 @@ class Service:
         b = self.batch(bid)
         files = []
         for j in b["jobs"]:
-            pdf = ((j.get("result") or {}).get("outputs") or {}).get("pdf")
+            outs = (j.get("result") or {}).get("outputs") or {}
+            pdf = outs.get("pdf") or (outs.get("delivered") if str(outs.get("delivered", "")).lower().endswith(".pdf") else None)
             if pdf and Path(pdf).exists():
                 files.append((Path(pdf), Path(pdf).name))
         if not files:

@@ -1,0 +1,175 @@
+name: Windows build, install and test
+
+on:
+  push:
+    branches: ["main", "claude/**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install backend dependencies
+        run: python -m pip install -r backend/requirements-dev.txt
+
+      - name: Backend test suite (Windows)
+        working-directory: backend
+        run: python -m pytest -q -p no:cacheprovider tests
+
+      - name: Build standalone processing engine (PyInstaller)
+        working-directory: backend
+        run: pyinstaller --noconfirm --log-level WARN ptd-backend.spec
+
+      - name: Create test documents (Uzbek names, spaces, long names)
+        run: |
+          python backend/tests/fixtures.py "$env:RUNNER_TEMP\fx"
+          $dir = "$env:RUNNER_TEMP\Explorer test\Sub folder"
+          New-Item -ItemType Directory -Force $dir | Out-Null
+          Copy-Item "$env:RUNNER_TEMP\fx\one_page_exam.pdf" "$env:RUNNER_TEMP\Explorer test\Oʻquvchilar uchun test — 1-chorak.pdf"
+          Copy-Item "$env:RUNNER_TEMP\fx\docx_exam.docx" "$env:RUNNER_TEMP\Explorer test\Ikkinchi test (Word).docx"
+          Copy-Item "$env:RUNNER_TEMP\fx\ten_page_exam.pdf" "$env:RUNNER_TEMP\Explorer test\$('Juda uzun nomli imtihon fayli ' * 5).pdf"
+          Copy-Item "$env:RUNNER_TEMP\fx\beginner.txt" "$dir\beginner.txt"
+
+      - name: Self-test packaged engine without Python on PATH
+        run: |
+          $env:PATH = "C:\Windows\system32;C:\Windows"
+          & backend\dist\ptd-backend\ptd-backend.exe --data-dir "$env:RUNNER_TEMP\selftest-data" --self-test "$env:RUNNER_TEMP\fx\scanned_exam.pdf"
+          if ($LASTEXITCODE -ne 0) { throw "engine self-test failed" }
+          & backend\dist\ptd-backend\ptd-backend.exe --data-dir "$env:RUNNER_TEMP\selftest-data" --self-test "$env:RUNNER_TEMP\fx\docx_exam.docx"
+          if ($LASTEXITCODE -ne 0) { throw "engine self-test failed (docx)" }
+
+      - name: Build desktop application and installer (electron-builder + NSIS)
+        working-directory: frontend
+        run: |
+          New-Item -ItemType Directory -Force backend-dist | Out-Null
+          Copy-Item -Recurse -Force ..\backend\dist\ptd-backend backend-dist\
+          npm ci --no-audit --no-fund
+          npm run build
+          git diff --exit-code -- build/installer.nsh
+          npx electron-builder --win --x64 --publish never
+          Get-ChildItem release -File | Format-Table Name, Length
+
+      - name: Silent install (all users, Program Files)
+        run: |
+          $p = Start-Process -FilePath "frontend\release\PDF_Test_Designer_Setup.exe" -ArgumentList "/S" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "installer exit code $($p.ExitCode)" }
+          $exe = "C:\Program Files\PDF Test Designer\PDF Test Designer.exe"
+          if (!(Test-Path $exe)) { throw "application not installed" }
+          if (!(Test-Path "C:\Program Files\PDF Test Designer\resources\backend\ptd-backend.exe")) { throw "engine not installed" }
+          if (!(Test-Path "$env:PUBLIC\Desktop\PDF Test Designer.lnk")) { Write-Warning "desktop shortcut not found in Public Desktop" }
+
+      - name: Verify Explorer context menu registration
+        run: |
+          $roots = @('SystemFileAssociations\.pdf','SystemFileAssociations\.docx','Directory','SystemFileAssociations\.png','SystemFileAssociations\.jpg','SystemFileAssociations\.tiff')
+          foreach ($r in $roots) {
+            $k = "Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Classes\$r\shell\PDFTestDesigner"
+            if (!(Test-Path -LiteralPath $k)) { throw "missing context menu: $r" }
+            $sub = Get-ChildItem -LiteralPath "$k\shell" | Select-Object -ExpandProperty PSChildName
+            Write-Host "$r -> $($sub -join ', ')"
+          }
+          $cmd = (Get-ItemProperty -LiteralPath 'Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Classes\SystemFileAssociations\.pdf\shell\PDFTestDesigner\shell\01_generate_default\command').'(default)'
+          Write-Host "PDF default action: $cmd"
+          if ($cmd -notmatch '^"C:\\Program Files\\PDF Test Designer\\PDF Test Designer\.exe" --shell=generate-default "%1"$') { throw "unexpected command line" }
+          $open = Get-ItemProperty -LiteralPath 'Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Classes\.pdf\OpenWithProgids'
+          if ($null -eq $open.'PDFTestDesigner.Document') { throw "Open with registration missing" }
+
+      - name: Right-click actions, exactly as Explorer invokes them
+        run: |
+          $exe = "C:\Program Files\PDF Test Designer\PDF Test Designer.exe"
+          $out = Join-Path ([Environment]::GetFolderPath('MyDocuments')) "PDF Test Designer\Exports"
+          function Invoke-Verb($verb, $path) {
+            # Explorer substitutes %1 with the quoted full path
+            Start-Process -FilePath $exe -ArgumentList @("--shell=$verb", "`"$path`"") | Out-Null
+          }
+          function Wait-For($pattern, $seconds) {
+            for ($i = 0; $i -lt $seconds; $i++) {
+              $f = Get-ChildItem -LiteralPath $out -Recurse -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -like $pattern }
+              if ($f) { return $f }
+              Start-Sleep 1
+            }
+            throw "timed out waiting for $pattern"
+          }
+          # 1. single PDF with Uzbek characters and spaces (application closed)
+          Invoke-Verb 'generate-default' "$env:RUNNER_TEMP\Explorer test\Oʻquvchilar uchun test — 1-chorak.pdf"
+          $f = Wait-For 'Oʻquvchilar uchun test — 1-chorak_Formatted.pdf' 240
+          Write-Host "single PDF -> $($f.FullName)"
+          # 2. multi-select (application already running): two invocations within a second
+          Invoke-Verb 'generate-default' "$env:RUNNER_TEMP\Explorer test\Ikkinchi test (Word).docx"
+          Invoke-Verb 'generate-default' "$env:RUNNER_TEMP\fx\uzbek_english.pdf"
+          Wait-For 'Ikkinchi test (Word)_Formatted.pdf' 240 | Out-Null
+          Wait-For 'uzbek_english_Formatted.pdf' 240 | Out-Null
+          # 3. very long file name
+          Invoke-Verb 'compress' (Get-ChildItem "$env:RUNNER_TEMP\Explorer test\Juda*.pdf").FullName
+          Wait-For '*_Compressed.pdf' 240 | Out-Null
+          # 4. folder with sub-folder
+          Invoke-Verb 'batch-generate' "$env:RUNNER_TEMP\Explorer test"
+          Start-Sleep 20
+          Get-ChildItem -LiteralPath $out -Recurse -File | Where-Object { $_.Extension -eq '.pdf' } | Format-Table FullName, Length
+          # originals are never modified
+          if ((Get-FileHash "$env:RUNNER_TEMP\fx\one_page_exam.pdf").Hash -ne (Get-FileHash "$env:RUNNER_TEMP\Explorer test\Oʻquvchilar uchun test — 1-chorak.pdf").Hash) { throw "original changed" }
+
+      - name: Close the application
+        if: always()
+        run: |
+          Get-Process "PDF Test Designer" -ErrorAction SilentlyContinue | Stop-Process -Force
+          Start-Sleep 5
+          Get-Process "ptd-backend" -ErrorAction SilentlyContinue | Stop-Process -Force
+
+      - name: Silent uninstall keeps user data and removes registry entries
+        run: |
+          Start-Process -FilePath "C:\Program Files\PDF Test Designer\Uninstall PDF Test Designer.exe" -ArgumentList "/S" -Wait
+          for ($i = 0; $i -lt 60 -and (Test-Path "C:\Program Files\PDF Test Designer\PDF Test Designer.exe"); $i++) { Start-Sleep 1 }
+          if (Test-Path -LiteralPath 'Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Classes\SystemFileAssociations\.pdf\shell\PDFTestDesigner') { throw "context menu not removed" }
+          if (Test-Path -LiteralPath 'Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Classes\Directory\shell\PDFTestDesigner') { throw "folder menu not removed" }
+          $docs = Join-Path ([Environment]::GetFolderPath('MyDocuments')) "PDF Test Designer"
+          if (!(Test-Path "$docs\Exports")) { throw "user documents were deleted" }
+          Write-Host "Uninstalled; user data kept in $docs"
+
+      - name: Collect logs
+        if: always()
+        run: |
+          New-Item -ItemType Directory -Force test-logs | Out-Null
+          Copy-Item -Recurse -ErrorAction SilentlyContinue "$env:APPDATA\PDF Test Designer\logs" test-logs\electron
+          Copy-Item -Recurse -ErrorAction SilentlyContinue (Join-Path ([Environment]::GetFolderPath('MyDocuments')) "PDF Test Designer\Logs") test-logs\engine
+          Copy-Item -Recurse -ErrorAction SilentlyContinue (Join-Path ([Environment]::GetFolderPath('MyDocuments')) "PDF Test Designer\Exports") test-logs\exports
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PDF_Test_Designer_Setup
+          path: frontend/release/PDF_Test_Designer_Setup.exe
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PDF_Test_Designer_Portable
+          path: |
+            frontend/release/PDF_Test_Designer_Portable.zip
+            frontend/release/PDF_Test_Designer_Standalone.exe
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-test-logs-and-outputs
+          path: test-logs

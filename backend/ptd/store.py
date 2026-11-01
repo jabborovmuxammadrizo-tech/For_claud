@@ -334,13 +334,19 @@ class Store:
         rec = self.template(tid) if tid else self.default_template()
         if rec is None:
             raise NotFound("template")
-        cfg = T.normalize(rec["config"])
+        return rec, self.apply_profile(T.normalize(rec["config"]))
+
+    def apply_profile(self, cfg: dict) -> dict:
         bp = cfg.get("branding_profile_id")
-        if bp:
-            prof = self.db.get("branding_profiles", bp)
-            if prof:
-                cfg["branding"] = T.deep_merge(prof["config"], {k: v for k, v in (rec["config"].get("branding_overrides") or {}).items()})
-        return rec, cfg
+        prof = self.db.get("branding_profiles", bp) if bp else None
+        if prof:
+            pc = T.deep_merge(T.DEFAULT_BRANDING, prof["config"])
+            own = cfg["branding"]
+            merged = {**own, **{k: pc.get(k) for k in T.IDENTITY_KEYS}}
+            if own.get("inherit_colors", True):
+                merged["colors"] = pc["colors"]
+            cfg["branding"] = merged
+        return cfg
 
     def template_hash(self, cfg: dict) -> str:
         return sha256_json(cfg)
@@ -367,12 +373,16 @@ class Store:
         logo = self._seed_logo()
         if not self.db.one("SELECT id FROM branding_profiles LIMIT 1"):
             self.save_branding("Mirzo Ulugbek NTM (demo)", {**T.DEFAULT_BRANDING, "logo_asset": logo})
+        profile = self.db.one("SELECT id FROM branding_profiles ORDER BY is_default DESC, created ASC LIMIT 1")
         if not self.db.one("SELECT id FROM templates WHERE builtin=1 LIMIT 1"):
             for i, spec in enumerate(T.BUILTIN):
                 spec = dict(spec)
                 is_def = spec.pop("is_default", False)
                 cfg = T.normalize(spec)
                 cfg["branding"]["logo_asset"] = logo
+                # organization identity (logo, watermark, texts) comes from the profile; each template keeps its palette
+                cfg["branding_profile_id"] = profile["id"] if profile else None
+                cfg["branding"]["inherit_colors"] = False
                 tid = f"tpl_builtin_{i + 1:02d}"
                 self.db.insert("templates", {"id": tid, "name": cfg["name"], "category": cfg["category"],
                                              "description": cfg.get("description", ""), "config": cfg,

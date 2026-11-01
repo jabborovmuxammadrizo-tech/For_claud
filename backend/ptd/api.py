@@ -23,6 +23,7 @@ from . import backup as B
 from . import images as IM
 from . import importers
 from . import model as M
+from . import shell as SH
 from . import templates as T
 from .importers import ocr
 from .layout import fonts as F
@@ -112,7 +113,7 @@ def create_app(svc: Service, token: str, allowed_origins: list[str] | None = Non
     @app.get("/api/settings")
     def get_settings():
         db = S().db
-        return {"ocr_enabled": db.get_setting("ocr_enabled", True), "autosave_seconds": db.get_setting("autosave_seconds", 20),
+        return {**SH.settings(S()), "output_dir_effective": str(S().paths.sub("Exports")) if not db.get_setting("output_dir", "") else db.get_setting("output_dir"),"ocr_enabled": db.get_setting("ocr_enabled", True), "autosave_seconds": db.get_setting("autosave_seconds", 20),
                 "default_import_mode": db.get_setting("default_import_mode", "editable"),
                 "daily_backup": db.get_setting("daily_backup", True), "language": db.get_setting("language", "en"),
                 "update_url": db.get_setting("update_url", ""), "check_updates": db.get_setting("check_updates", False),
@@ -120,7 +121,14 @@ def create_app(svc: Service, token: str, allowed_origins: list[str] | None = Non
 
     @app.put("/api/settings")
     def put_settings(body: dict = Body(...)):
-        allowed = {"ocr_enabled", "autosave_seconds", "default_import_mode", "daily_backup", "language", "update_url", "check_updates"}
+        allowed = {"ocr_enabled", "autosave_seconds", "default_import_mode", "daily_backup", "language", "update_url", "check_updates",
+                   *SH.SHELL_DEFAULTS}
+        if "output_dir" in body and body["output_dir"]:
+            d = Path(body["output_dir"])
+            if not d.is_absolute():
+                raise HTTPException(400, "The output folder must be a full path, e.g. C:\\Users\\Teacher\\Documents\\Exams")
+        if body.get("output_naming") == "custom" and "{name}" not in str(body.get("output_pattern", S().db.get_setting("output_pattern", "{name}"))):
+            raise HTTPException(400, "A custom naming pattern must contain {name}.")
         for k, v in body.items():
             if k in allowed:
                 S().db.set_setting(k, v)
@@ -311,6 +319,21 @@ def create_app(svc: Service, token: str, allowed_origins: list[str] | None = Non
             raise HTTPException(404, "No such output")
         return file_response(p, download)
 
+    # ------------------------------------------------------------------ Windows Explorer integration
+    @app.post("/api/shell/run")
+    def shell_run(body: dict = Body(...)):
+        paths = body.get("paths") or []
+        if not isinstance(paths, list) or not all(isinstance(p, str) for p in paths) or not paths or len(paths) > 5000:
+            raise HTTPException(400, "Invalid file list")
+        try:
+            return SH.run(S(), str(body.get("command", "")), paths, body.get("template_id"), body.get("options") or {})
+        except SH.ShellError as e:
+            raise HTTPException(400, str(e))
+
+    @app.post("/api/batches/{bid}/cancel")
+    def batch_cancel(bid: str):
+        return S().cancel_batch(bid)
+
     # ------------------------------------------------------------------ batches
     @app.post("/api/batches")
     async def create_batch(files: list[UploadFile] = File(...), template_id: str | None = Form(None), name: str | None = Form(None)):
@@ -336,8 +359,11 @@ def create_app(svc: Service, token: str, allowed_origins: list[str] | None = Non
         return S().retry_batch_failed(bid)
 
     @app.get("/api/batches/{bid}/zip")
-    def batch_zip(bid: str):
+    def batch_zip(bid: str, to_output: bool = False):
         p = S().batch_zip(bid)
+        if to_output:
+            dest = SH.deliver(S(), p, SH.output_dir(S()), SH.windows_safe(Path(p).stem) + ".zip")
+            return {"path": str(dest)}
         return file_response(p, True)
 
     # ------------------------------------------------------------------ exports
@@ -420,7 +446,7 @@ def create_app(svc: Service, token: str, allowed_origins: list[str] | None = Non
     def template_preview(body: dict = Body(...)):
         """Render a sample exam with an (unsaved) template config, for the template editor."""
         from .sample import sample_document
-        cfg = T.normalize(body.get("config") or {})
+        cfg = S().store.apply_profile(T.normalize(body.get("config") or {}))
         out = S().paths.sub("Temp") / "preview" / f"tpl-{new_id()}.pdf"
         from .layout.renderer import render
         r = render(sample_document(), cfg, S().store.asset_path, out, S().paths.sub("Temp") / "render-cache", {"quality": "standard"})

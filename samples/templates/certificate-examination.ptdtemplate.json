@@ -1,0 +1,204 @@
+{
+ "ptd_template": 1,
+ "config": {
+  "schema": 1,
+  "name": "Certificate Examination",
+  "category": "certificate",
+  "tags": [
+   "certificate",
+   "cefr",
+   "ielts",
+   "formal",
+   "national"
+  ],
+  "description": "Formal certificate exam: classic cover, compact density, answer sheet.",
+  "branding_profile_id": null,
+  "branding": {
+   "org_name": "MIRZO ULUGBEK NTM",
+   "logo_asset": null,
+   "secondary_logo_asset": null,
+   "watermark": {
+    "type": "text",
+    "text": "CONFIDENTIAL",
+    "asset": null,
+    "opacity": 0.05,
+    "angle": 45,
+    "size": 54,
+    "layer": "under"
+   },
+   "colors": {
+    "primary": "#0F1F4B",
+    "secondary": "#111827",
+    "accent": "#DC2626",
+    "text": "#111827",
+    "muted": "#64748B",
+    "page_bg": "#FFFFFF",
+    "panel_bg": "#FFFFFF"
+   },
+   "header_text": "",
+   "footer_text": "MIRZO ULUGBEK NTM — Examination materials",
+   "teacher_name": "",
+   "exam_title": "",
+   "contact": "",
+   "background_asset": null
+  },
+  "page": {
+   "size": "A4",
+   "orientation": "portrait",
+   "width_mm": 210.0,
+   "height_mm": 297.0,
+   "margins_mm": {
+    "top": 30,
+    "bottom": 22,
+    "left": 18,
+    "right": 18
+   },
+   "background": {
+    "color": null,
+    "image_asset": null,
+    "image_opacity": 0.15
+   },
+   "content_panel": false,
+   "columns": 1,
+   "column_gap_mm": 8
+  },
+  "fonts": {
+   "body": "Liberation Sans",
+   "heading": "Liberation Sans",
+   "body_size": 10,
+   "question_size": 10.5,
+   "option_size": 10,
+   "heading_sizes": [
+    16,
+    13,
+    11.5
+   ],
+   "line_spacing": 1.3
+  },
+  "header": {
+   "enabled": true,
+   "style": "line",
+   "show_logo": true,
+   "show_org": true,
+   "show_title": true,
+   "height_mm": 16,
+   "text": ""
+  },
+  "footer": {
+   "enabled": true,
+   "text": null,
+   "show_page_numbers": true,
+   "page_number_format": "Page {page} of {total}",
+   "align": "center",
+   "number_cover": false
+  },
+  "cover": {
+   "enabled": true,
+   "style": "classic",
+   "title": null,
+   "subtitle": "",
+   "show_logo": true,
+   "fields": [
+    "Candidate name",
+    "Candidate number",
+    "Centre",
+    "Date",
+    "Signature"
+   ],
+   "instructions": "",
+   "show_stats": true
+  },
+  "questions": {
+   "numbering": "preserve",
+   "number_format": "{n}.",
+   "bold_number": true,
+   "number_color": null,
+   "option_layout": "auto",
+   "option_label_format": "{L})",
+   "option_label_case": "preserve",
+   "keep_together": true,
+   "box": false,
+   "box_color": "#F1F5F9",
+   "answer_lines": 0,
+   "show_points": true,
+   "space_between_mm": 3
+  },
+  "sections": {
+   "style": "bar",
+   "uppercase": true,
+   "page_break_before": false,
+   "color": null
+  },
+  "instructions": {
+   "style": "box",
+   "italic": true
+  },
+  "tables": {
+   "header_bg": null,
+   "header_color": "#FFFFFF",
+   "border_color": "#94A3B8",
+   "stripe": true,
+   "stripe_color": "#F1F5F9",
+   "font_size": 9,
+   "repeat_header": true,
+   "min_font_size": 6.5
+  },
+  "images": {
+   "max_width_pct": 90,
+   "max_height_pct": 55,
+   "align": "center",
+   "full_width_maps": true,
+   "border": false
+  },
+  "layouts": {
+   "standard": {
+    "columns": null,
+    "badge": null
+   },
+   "listening": {
+    "columns": 1,
+    "badge": "LISTENING"
+   },
+   "reading": {
+    "columns": 1,
+    "badge": "READING"
+   },
+   "writing": {
+    "columns": 1,
+    "badge": "WRITING"
+   },
+   "instructions": {
+    "columns": 1,
+    "badge": "INSTRUCTIONS"
+   },
+   "answer_sheet": {
+    "columns": 1,
+    "badge": "ANSWER SHEET"
+   },
+   "results": {
+    "columns": 1,
+    "badge": "RESULTS"
+   }
+  },
+  "pagination": {
+   "density": "compact",
+   "keep_options_with_question": true,
+   "avoid_orphan_headings": true,
+   "widow_orphan_control": true,
+   "preserve_source_page_breaks": false,
+   "section_layout_page_breaks": true
+  },
+  "answer_sheet": {
+   "enabled": true,
+   "options": 4
+  },
+  "export": {
+   "quality": "print",
+   "grayscale": false,
+   "compressed_copy": true,
+   "thumbnails": true,
+   "page_images": false,
+   "pdf_title_from_document": true
+  }
+ }
+}

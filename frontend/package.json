@@ -11,11 +11,12 @@
     "dev": "node scripts/dev.mjs",
     "build:renderer": "vite build",
     "build:electron": "node scripts/build-electron.mjs",
-    "build": "npm run typecheck && npm run build:renderer && npm run build:electron",
+    "build": "npm run typecheck && npm run build:renderer && npm run build:electron && npm run gen:installer",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "dist:win": "npm run build && electron-builder --win --x64",
-    "dist:linux": "npm run build && electron-builder --linux dir",
-    "start": "electron ."
+    "dist:win": "npm run build && electron-builder --win --x64 --publish never",
+    "dist:linux": "npm run build && electron-builder --linux dir --publish never",
+    "start": "electron .",
+    "gen:installer": "node scripts/gen-installer-nsh.mjs"
   },
   "dependencies": {},
   "devDependencies": {
@@ -35,5 +36,86 @@
     "tailwindcss": "3.4.17",
     "typescript": "5.8.3",
     "vite": "6.3.5"
+  },
+  "build": {
+    "appId": "uz.mirzoulugbek.pdftestdesigner",
+    "productName": "PDF Test Designer",
+    "copyright": "© MIRZO ULUGBEK NTM",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "build/icon.png",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "backend-dist/ptd-backend",
+        "to": "backend",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "asar": true,
+    "compression": "normal",
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "executableName": "PDF Test Designer",
+      "artifactName": "PDF_Test_Designer_Portable.${ext}",
+      "requestedExecutionLevel": "asInvoker"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": true,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "PDF Test Designer",
+      "menuCategory": false,
+      "runAfterFinish": true,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico",
+      "uninstallDisplayName": "PDF Test Designer — Mirzo Ulugbek NTM",
+      "include": "build/installer.nsh",
+      "deleteAppDataOnUninstall": false,
+      "artifactName": "PDF_Test_Designer_Setup.${ext}"
+    },
+    "portable": {
+      "artifactName": "PDF_Test_Designer_Standalone.${ext}"
+    },
+    "linux": {
+      "target": [
+        "dir"
+      ],
+      "icon": "build/icon.png",
+      "category": "Education",
+      "executableName": "pdf-test-designer"
+    }
   }
 }

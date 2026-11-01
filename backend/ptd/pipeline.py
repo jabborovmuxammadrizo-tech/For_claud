@@ -41,6 +41,10 @@ class UserError(Exception):
     """Failure with a message meant for the user."""
 
 
+class Cancelled(Exception):
+    pass
+
+
 def initial_steps() -> list[dict]:
     return [{"key": k, "label": l, "status": "pending", "progress": 0.0, "detail": "", "started": None, "finished": None}
             for k, l in STEPS]
@@ -76,6 +80,8 @@ class JobRun:
             self.svc.db.update("jobs", self.id, {"steps": self.steps, "progress": self.overall()})
 
     def start(self, key):
+        if self.id in self.svc.cancel_requests:
+            raise Cancelled()
         s = self._step(key)
         s.update(status="running", started=now(), progress=0.0)
         self.current = key
@@ -299,7 +305,13 @@ def run_generate(svc: "Service", job: dict) -> None:
         log_lines = [f"{time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(l['ts']))} [{l['level']}] {l['message']}"
                      for l in svc.db.all("SELECT * FROM job_log WHERE job_id=? ORDER BY id", (job["id"],))]
         (edir / "processing-log.txt").write_text("\n".join(log_lines), encoding="utf-8")
-        run.done("export", f"Saved to {edir.name}")
+        delivered = None
+        if opts.get("deliver_dir"):
+            from . import shell as SH
+            delivered = str(SH.deliver(svc, final, Path(opts["deliver_dir"]),
+                                       SH.output_name(svc, opts.get("deliver_stem") or title, rec["name"])))
+            outputs["delivered"] = delivered
+        run.done("export", f"Saved to {Path(delivered).name if delivered else edir.name}")
         status = "succeeded" if summary["passed"] else "needs_review"
         result = {"outputs": outputs, "export_dir": str(edir), "pages": r.pages, "thumbnails": [str(t) for t in thumbs],
                   "validation": {"summary": summary, "issues": issues[:300]}, "counts": counts,
@@ -310,6 +322,8 @@ def run_generate(svc: "Service", job: dict) -> None:
                                   template_id=rec["id"])
         svc.db.update("documents", doc["id"], {"page_count": r.pages})
         run.log(f"Finished: {status}")
+    except Cancelled:
+        _fail(svc, run, "Cancelled by the user.", status="cancelled")
     except UserError as e:
         _fail(svc, run, str(e))
     except RenderError as e:
@@ -321,10 +335,11 @@ def run_generate(svc: "Service", job: dict) -> None:
         _fail(svc, run, f"Unexpected error: {e.__class__.__name__}: {e}")
 
 
-def _fail(svc: "Service", run: JobRun, msg: str):
+def _fail(svc: "Service", run: JobRun, msg: str, status: str = "failed"):
     run.fail_current(msg)
-    run.log(msg, "error")
-    svc.db.update("jobs", run.id, {"status": "failed", "error": msg, "finished": now(), "steps": run.steps})
+    run.log(msg, "error" if status == "failed" else "warning")
+    svc.db.update("jobs", run.id, {"status": status, "error": msg, "finished": now(), "steps": run.steps})
+    svc.cancel_requests.discard(run.id)
 
 
 def idem_key(svc: "Service", doc: dict, template_cfg: dict, options: dict) -> str:

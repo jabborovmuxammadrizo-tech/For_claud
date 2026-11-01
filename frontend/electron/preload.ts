@@ -11,6 +11,22 @@ const api = {
   openDataDir: () => ipcRenderer.invoke("shell:openDataDir"),
   relaunch: () => ipcRenderer.invoke("app:relaunch"),
   checkUpdate: (url: string) => ipcRenderer.invoke("update:check", url),
+  shellRequest: (id: string) => ipcRenderer.invoke("shellreq:get", id),
+  openMain: (hash: string) => ipcRenderer.invoke("app:openMain", hash),
+  notify: (title: string, body: string, open?: string) => ipcRenderer.invoke("app:notify", { title, body, open }),
+  chooseFolder: () => ipcRenderer.invoke("dialog:chooseFolder"),
+  integration: {
+    status: () => ipcRenderer.invoke("integration:status"),
+    apply: (settings: Record<string, unknown>) => ipcRenderer.invoke("integration:apply", settings),
+    restore: () => ipcRenderer.invoke("integration:restore"),
+    registerUser: () => ipcRenderer.invoke("integration:registerUser"),
+    unregisterUser: () => ipcRenderer.invoke("integration:unregisterUser"),
+  },
+  onNavigate: (cb: (hash: string) => void) => {
+    const h = (_e: unknown, hash: string) => cb(hash);
+    ipcRenderer.on("app:navigate", h);
+    return () => ipcRenderer.removeListener("app:navigate", h);
+  },
   onBackendRestarted: (cb: (info: unknown) => void) => {
     const h = (_e: unknown, info: unknown) => cb(info);
     ipcRenderer.on("backend:restarted", h);

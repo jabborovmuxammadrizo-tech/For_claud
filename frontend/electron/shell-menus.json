@@ -1,0 +1,66 @@
+{
+  "verbKey": "PDFTestDesigner",
+  "title": "PDF Test Designer",
+  "groups": [
+    {
+      "id": "pdf",
+      "setting": "shell_menu_pdf",
+      "roots": ["SystemFileAssociations\\.pdf"],
+      "items": [
+        { "key": "01_generate_default", "label": "Generate PDF Using Default Template", "args": "--shell=generate-default", "setting": "shell_default_action" },
+        { "key": "02_generate_using", "label": "Generate PDF Using...", "args": "--shell=generate-template" },
+        { "key": "03_open", "label": "Open in PDF Test Designer", "args": "--shell=open" },
+        { "key": "04_edit", "label": "Edit Document", "args": "--shell=edit" },
+        { "key": "05_extract", "label": "Extract Text and Images", "args": "--shell=extract", "separatorBefore": true },
+        { "key": "06_editable", "label": "Convert to Editable Document", "args": "--shell=convert-editable" },
+        { "key": "07_compress", "label": "Compress PDF", "args": "--shell=compress" },
+        { "key": "08_grayscale", "label": "Convert to Grayscale", "args": "--shell=grayscale" },
+        { "key": "09_info", "label": "View Document Information", "args": "--shell=info" },
+        { "key": "10_batch_default", "label": "Batch Generate Using Default Template", "args": "--shell=batch-generate", "setting": "shell_batch", "separatorBefore": true },
+        { "key": "11_batch_using", "label": "Batch Generate Using...", "args": "--shell=batch-generate --pick-template", "setting": "shell_batch" },
+        { "key": "12_open_all", "label": "Open All in PDF Test Designer", "args": "--shell=open", "setting": "shell_batch" }
+      ]
+    },
+    {
+      "id": "docx",
+      "setting": "shell_menu_docx",
+      "roots": ["SystemFileAssociations\\.docx"],
+      "items": [
+        { "key": "01_branded", "label": "Generate Branded PDF", "args": "--shell=generate-default", "setting": "shell_default_action" },
+        { "key": "02_generate_default", "label": "Generate Using Default Template", "args": "--shell=generate-default", "setting": "shell_default_action" },
+        { "key": "03_generate_using", "label": "Generate Using...", "args": "--shell=generate-template" },
+        { "key": "04_editor", "label": "Open in Document Editor", "args": "--shell=edit", "separatorBefore": true },
+        { "key": "05_images", "label": "Extract Images", "args": "--shell=extract" },
+        { "key": "06_pdf", "label": "Convert to PDF", "args": "--shell=convert-pdf" },
+        { "key": "07_batch_default", "label": "Batch Generate Using Default Template", "args": "--shell=batch-generate", "setting": "shell_batch", "separatorBefore": true },
+        { "key": "08_batch_using", "label": "Batch Generate Using...", "args": "--shell=batch-generate --pick-template", "setting": "shell_batch" },
+        { "key": "09_open_all", "label": "Open All in PDF Test Designer", "args": "--shell=open", "setting": "shell_batch" }
+      ]
+    },
+    {
+      "id": "folder",
+      "setting": "shell_menu_folder",
+      "roots": ["Directory"],
+      "items": [
+        { "key": "01_generate_all", "label": "Generate All Supported Documents", "args": "--shell=batch-generate", "setting": "shell_default_action" },
+        { "key": "02_batch_default", "label": "Batch Generate Using Default Template", "args": "--shell=batch-generate", "setting": "shell_batch" },
+        { "key": "03_batch_using", "label": "Batch Generate Using...", "args": "--shell=batch-generate --pick-template", "setting": "shell_batch" },
+        { "key": "04_open_folder", "label": "Open Folder in PDF Test Designer", "args": "--shell=open-folder" }
+      ]
+    },
+    {
+      "id": "image",
+      "setting": "shell_menu_image",
+      "roots": ["SystemFileAssociations\\.png", "SystemFileAssociations\\.jpg", "SystemFileAssociations\\.jpeg", "SystemFileAssociations\\.bmp", "SystemFileAssociations\\.tif", "SystemFileAssociations\\.tiff"],
+      "items": [
+        { "key": "01_library", "label": "Add to Image Library", "args": "--shell=image-library" },
+        { "key": "02_pdf", "label": "Create PDF From Image", "args": "--shell=image-pdf" },
+        { "key": "03_editor", "label": "Open in Image Editor", "args": "--shell=image-editor" },
+        { "key": "04_background", "label": "Use as Document Background", "args": "--shell=image-background", "separatorBefore": true },
+        { "key": "05_watermark", "label": "Use as Watermark", "args": "--shell=image-watermark" }
+      ]
+    }
+  ],
+  "progId": "PDFTestDesigner.Document",
+  "openWithExtensions": [".pdf", ".docx", ".txt"]
+}

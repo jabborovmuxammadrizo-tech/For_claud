@@ -14,6 +14,7 @@ import ImageLibrary from "./pages/Images";
 import ImportPage from "./pages/Import";
 import QuickGenerator from "./pages/QuickGenerator";
 import SettingsPage from "./pages/Settings";
+import TaskPage from "./pages/Task";
 import TemplatesPage from "./pages/Templates";
 
 export type Route = { page: string; id?: string; params: URLSearchParams };
@@ -77,13 +78,14 @@ export default function App() {
   useEffect(() => {
     const h = () => setRoute(parseHash());
     window.addEventListener("hashchange", h);
+    const off = window.ptd?.onNavigate((hash) => navigate(hash));
     initApi().then(async () => {
       for (let i = 0; i < 40; i++) {
         try { await api("/api/info"); setReady(true); return; } catch { await new Promise((r) => setTimeout(r, 250)); }
       }
       setError("The processing engine is not responding. Restart the application; if the problem continues, check the logs in Settings.");
     });
-    return () => window.removeEventListener("hashchange", h);
+    return () => { window.removeEventListener("hashchange", h); off?.(); };
   }, []);
 
   let body: React.ReactNode;
@@ -95,6 +97,9 @@ export default function App() {
       branding: BrandingPage, images: ImageLibrary, fonts: Fonts, batch: Batch, settings: SettingsPage,
     }[route.page] || Dashboard;
     body = <P route={route} />;
+  }
+  if (route.page === "task") {
+    return <ToastProvider><DialogProvider>{ready ? <TaskPage route={route} /> : <div className="flex h-screen items-center justify-center">{error || <Spinner className="h-8 w-8" />}</div>}</DialogProvider></ToastProvider>;
   }
   const full = route.page === "editor" && !!route.id;
   return (
