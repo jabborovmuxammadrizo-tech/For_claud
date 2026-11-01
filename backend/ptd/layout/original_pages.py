@@ -12,8 +12,10 @@ from reportlab.pdfgen import canvas as rl_canvas
 
 from ..util import norm_tokens
 from .renderer import Ctx, Furniture, RenderResult, _overlays
+from ..mupdf import locked
 
 
+@locked
 def render_original(doc_model: dict, template: dict, resolve_asset: Callable, source_pdf: Path, out_path: Path,
                     cache_dir: Path, options: dict | None = None, progress=None) -> RenderResult:
     options = options or {}

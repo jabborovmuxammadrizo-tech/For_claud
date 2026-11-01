@@ -19,6 +19,8 @@ from . import validation as V
 from .layout import fonts as F
 from .layout.original_pages import render_original
 from .layout.renderer import RenderError, render
+from .mupdf import LOCK as MU
+from .mupdf import locked
 from .util import now, safe_filename, sha256_json, unique_path, write_json_atomic
 
 if TYPE_CHECKING:
@@ -135,9 +137,10 @@ def ensure_model(svc: "Service", run: JobRun | None, doc: dict, reextract: bool 
         elif kind == "image":
             work = _images_to_pdf(src, Path(doc["source_path"]).parent.parent / "work" / "original.pdf")
             m["meta"]["work_pdf"] = str(work)
-            pd = pymupdf.open(work)
-            m["original_pages"] = [{"index": i, "rotation": 0, "include": True} for i in range(pd.page_count)]
-            pd.close()
+            with MU:
+                pd = pymupdf.open(work)
+                m["original_pages"] = [{"index": i, "rotation": 0, "include": True} for i in range(pd.page_count)]
+                pd.close()
         else:
             m["meta"]["warnings"].append({"level": "warning", "code": "original_mode_unavailable",
                                           "message": "Original-page mode needs a PDF or image. This DOCX was imported as editable content instead."})
@@ -149,6 +152,7 @@ def ensure_model(svc: "Service", run: JobRun | None, doc: dict, reextract: bool 
     return m, False
 
 
+@locked
 def _images_to_pdf(src: Path, dest: Path) -> Path:
     dest.parent.mkdir(parents=True, exist_ok=True)
     img = pymupdf.open(src)
@@ -187,12 +191,13 @@ def run_generate(svc: "Service", job: dict) -> None:
             raise UserError("The original file is missing from the document folder.")
         detail = f"{doc['kind'].upper()} file, {src.stat().st_size / 1024:.0f} KB"
         if doc["kind"] == "pdf":
-            pd = pymupdf.open(src)
-            empty = sum(1 for p in pd if len(p.get_text().strip()) < 15)
-            detail += f", {pd.page_count} page(s)"
-            if empty:
-                detail += f", {empty} without a text layer (OCR needed)"
-            pd.close()
+            with MU:
+                pd = pymupdf.open(src)
+                empty = sum(1 for p in pd if len(p.get_text().strip()) < 15)
+                detail += f", {pd.page_count} page(s)"
+                if empty:
+                    detail += f", {empty} without a text layer (OCR needed)"
+                pd.close()
         run.done("analyze", detail)
 
         # ---------------- 2. extract
@@ -295,10 +300,12 @@ def run_generate(svc: "Service", job: dict) -> None:
                   "engine": ENGINE_VERSION, "generated": now()}
         write_json_atomic(edir / "validation.json", report)
         # verify the files really exist and open before reporting success
-        chk = pymupdf.open(final)
-        if chk.page_count != r.pages or chk.page_count == 0:
+        with MU:
+            chk = pymupdf.open(final)
+            ok_pages = chk.page_count
+            chk.close()
+        if ok_pages != r.pages or ok_pages == 0:
             raise UserError("The generated PDF could not be verified.")
-        chk.close()
         for kind_, p in outputs.items():
             svc.db.insert("exports", {"id": f"ex_{job['id'][-10:]}_{kind_}", "document_id": doc["id"], "job_id": job["id"],
                                       "kind": kind_, "path": p, "size": Path(p).stat().st_size, "created": now()})

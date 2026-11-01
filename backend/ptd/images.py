@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pymupdf
 from PIL import Image, ImageOps
+from .mupdf import locked
 
 Image.MAX_IMAGE_PIXELS = 200_000_000
 
@@ -19,6 +20,7 @@ QUALITY = {
 }
 
 
+@locked
 def probe(path: Path) -> dict:
     if path.suffix.lower() == ".svg":
         try:
@@ -73,6 +75,7 @@ def prepare_for_pdf(src: Path, cache_dir: Path, display_w_pt: float, display_h_p
         return out, info
 
 
+@locked
 def svg_to_png(src: Path, cache_dir: Path, w_pt: float, h_pt: float, dpi: int = 600) -> Path:
     """Rasterise an SVG with MuPDF at print resolution (keeps transparency)."""
     key = hashlib.sha1(f"svg:{src}:{src.stat().st_mtime_ns}:{w_pt:.1f}:{h_pt:.1f}:{dpi}".encode()).hexdigest()

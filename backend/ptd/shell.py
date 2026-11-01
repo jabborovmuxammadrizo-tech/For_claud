@@ -22,6 +22,8 @@ from . import importers
 from . import model as M
 from .importers import ImportErrorUser
 from .util import new_id, now
+from .mupdf import LOCK as MU
+from .mupdf import locked
 
 if TYPE_CHECKING:
     from .service import Service
@@ -262,11 +264,12 @@ def run_op(svc: "Service", job: dict) -> None:
         if op in ("compress", "grayscale", "info") and src.suffix.lower() != ".pdf":
             raise ShellError(f"{op.capitalize()} works with PDF files only.")
         if op == "compress":
-            d = pymupdf.open(local)
-            d.rewrite_images(dpi_threshold=160, dpi_target=130, quality=72)
-            tmp = work / "compressed.pdf"
-            d.save(tmp, garbage=4, deflate=True, deflate_images=True, deflate_fonts=True, clean=True)
-            d.close()
+            with MU:
+                d = pymupdf.open(local)
+                d.rewrite_images(dpi_threshold=160, dpi_target=130, quality=72)
+                tmp = work / "compressed.pdf"
+                d.save(tmp, garbage=4, deflate=True, deflate_images=True, deflate_fonts=True, clean=True)
+                d.close()
             before, after = local.stat().st_size, tmp.stat().st_size
             if after >= before:
                 shutil.copy2(local, tmp)
@@ -275,11 +278,12 @@ def run_op(svc: "Service", job: dict) -> None:
             run.start("save")
             delivered.append(str(deliver(svc, tmp, out_dir, output_name(svc, src.stem, suffix="Compressed"))))
         elif op == "grayscale":
-            d = pymupdf.open(local)
-            d.recolor(1)
-            tmp = work / "gray.pdf"
-            d.save(tmp, garbage=3, deflate=True)
-            d.close()
+            with MU:
+                d = pymupdf.open(local)
+                d.recolor(1)
+                tmp = work / "gray.pdf"
+                d.save(tmp, garbage=3, deflate=True)
+                d.close()
             run.done("process", "Colours converted to grayscale (text stays searchable)")
             run.start("save")
             delivered.append(str(deliver(svc, tmp, out_dir, output_name(svc, src.stem, suffix="Grayscale"))))
@@ -289,10 +293,11 @@ def run_op(svc: "Service", job: dict) -> None:
             run.start("save")
         elif op in ("extract", "convert-editable", "convert-pdf", "image-pdf"):
             if op == "image-pdf":
-                img = pymupdf.open(local)
-                pdf = pymupdf.open("pdf", img.convert_to_pdf())
-                tmp = work / "image.pdf"
-                pdf.save(tmp)
+                with MU:
+                    img = pymupdf.open(local)
+                    pdf = pymupdf.open("pdf", img.convert_to_pdf())
+                    tmp = work / "image.pdf"
+                    pdf.save(tmp)
                 run.done("process", f"{pdf.page_count} page(s)")
                 run.start("save")
                 delivered.append(str(deliver(svc, tmp, out_dir, output_name(svc, src.stem, suffix="Image"))))
@@ -368,6 +373,7 @@ def run_op(svc: "Service", job: dict) -> None:
         _fail(svc, run, str(e))
 
 
+@locked
 def document_info(local: Path, original: Path) -> dict:
     d = pymupdf.open(local)
     pages = d.page_count

@@ -9,6 +9,7 @@ import pymupdf
 
 from .. import model
 from . import ocr, structure
+from ..mupdf import locked
 
 SaveImage = Callable[[bytes, str, dict], dict]  # (bytes, ext, meta) -> {"asset", "width", "height"}
 Progress = Callable[[float, str], None]
@@ -155,6 +156,7 @@ def _furniture(pages_lines, page_heights):
     return repeated
 
 
+@locked
 def extract(path: str, save_image: SaveImage, progress: Progress | None = None, ocr_enabled: bool = True) -> dict:
     progress = progress or (lambda f, m: None)
     doc = pymupdf.open(path)
@@ -413,6 +415,7 @@ def _fmt_pages(pages):
     return ", ".join(map(str, pages[:12])) + ("…" if len(pages) > 12 else "")
 
 
+@locked
 def original_pages(path: str) -> list[dict]:
     doc = pymupdf.open(path)
     out = [{"index": i, "width": p.rect.width, "height": p.rect.height, "rotation": p.rotation}

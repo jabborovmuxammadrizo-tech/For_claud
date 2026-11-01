@@ -6,8 +6,10 @@ import zipfile
 from pathlib import Path
 
 import pymupdf
+from .mupdf import locked
 
 
+@locked
 def compress_pdf(src: Path, dest: Path) -> Path:
     d = pymupdf.open(src)
     d.save(dest, garbage=4, deflate=True, deflate_images=True, deflate_fonts=True, clean=True)
@@ -15,6 +17,7 @@ def compress_pdf(src: Path, dest: Path) -> Path:
     return dest
 
 
+@locked
 def optimize_in_place(path: Path) -> None:
     d = pymupdf.open(path)
     tmp = path.with_suffix(".opt.pdf")
@@ -23,6 +26,7 @@ def optimize_in_place(path: Path) -> None:
     tmp.replace(path)
 
 
+@locked
 def select_pages(src: Path, dest: Path, pages: list[int]) -> Path:
     d = pymupdf.open(src)
     valid = [p - 1 for p in pages if 1 <= p <= d.page_count]
@@ -35,6 +39,7 @@ def select_pages(src: Path, dest: Path, pages: list[int]) -> Path:
     return dest
 
 
+@locked
 def page_images(src: Path, out_dir: Path, fmt: str = "png", dpi: int = 150, pages: list[int] | None = None,
                 prefix: str = "page") -> list[Path]:
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -54,6 +59,7 @@ def page_images(src: Path, out_dir: Path, fmt: str = "png", dpi: int = 150, page
     return out
 
 
+@locked
 def thumbnails(src: Path, out_dir: Path, width_px: int = 220) -> list[Path]:
     d = pymupdf.open(src)
     out_dir.mkdir(parents=True, exist_ok=True)

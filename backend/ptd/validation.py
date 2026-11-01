@@ -18,10 +18,12 @@ import pymupdf
 
 from . import model as M
 from .util import norm_tokens
+from .mupdf import locked
 
 LEVELS = ("critical", "warning", "info")
 
 
+@locked
 def source_tokens(path: Path, kind: str) -> list[str] | None:
     """Raw word tokens of the original file, or None when not text-extractable (scans, images)."""
     try:
@@ -104,6 +106,7 @@ def _pdf_text_tokens(pdf: pymupdf.Document) -> tuple[list[str], list[list[str]]]
     return all_t, per_page
 
 
+@locked
 def check_render(doc_model: dict, render, template: dict, include: set | None = None) -> tuple[list[dict], list[dict]]:
     """Returns (issues, suggested_repairs[{block, repair}])."""
     issues: list[dict] = []
@@ -296,6 +299,7 @@ def summarize(issues: list[dict]) -> dict:
             "passed": c.get("critical", 0) == 0}
 
 
+@locked
 def compare_counts(doc_model: dict, render) -> dict:
     st = M.stats(doc_model)
     pdf = pymupdf.open(render.path)

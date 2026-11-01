@@ -242,11 +242,14 @@ def create_app(svc: Service, token: str, allowed_origins: list[str] | None = Non
         src = (m.get("meta") or {}).get("work_pdf") or d["source_path"]
         if d["kind"] not in ("pdf", "image"):
             raise HTTPException(400, "Page previews are available for PDF and image files")
-        pdf = pymupdf.open(src)
-        if not 1 <= n <= pdf.page_count:
-            raise HTTPException(404, "No such page")
-        png = pdf[n - 1].get_pixmap(dpi=max(20, min(dpi, 200))).tobytes("png")
-        pdf.close()
+        from .mupdf import LOCK
+        with LOCK:
+            pdf = pymupdf.open(src)
+            if not 1 <= n <= pdf.page_count:
+                pdf.close()
+                raise HTTPException(404, "No such page")
+            png = pdf[n - 1].get_pixmap(dpi=max(20, min(dpi, 200))).tobytes("png")
+            pdf.close()
         return Response(png, media_type="image/png")
 
     @app.post("/api/documents/{did}/preview")

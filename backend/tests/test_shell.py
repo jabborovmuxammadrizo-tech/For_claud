@@ -55,7 +55,9 @@ def test_mixed_multi_select_batch_with_template_and_zip(svc, fx, out):
     paths = [str(fx["one_page"][0]), str(fx["docx_exam"][0]), str(fx["txt_exam"][0])]
     res = SH.run(svc, "batch-generate", paths, tpl["id"])
     b = wait_task(svc, res)
-    assert b["template_id"] == tpl["id"] and b["counts"]["succeeded"] == 3
+    detail = [(j["source_name"], j["status"], j["error"], [i["message"] for i in ((j["result"] or {}).get("validation") or {}).get("issues", [])
+                                                          if i["level"] == "critical"]) for j in b["jobs"] if j["status"] != "succeeded"]
+    assert b["template_id"] == tpl["id"] and b["counts"]["succeeded"] == 3, detail
     names = sorted(Path(j["result"]["outputs"]["delivered"]).name for j in b["jobs"])
     assert names == ["beginner_Formatted.pdf", "docx_exam_Formatted.pdf", "one_page_exam_Formatted.pdf"]
     assert all(Path(j["result"]["outputs"]["delivered"]).parent.parent == out for j in b["jobs"])
