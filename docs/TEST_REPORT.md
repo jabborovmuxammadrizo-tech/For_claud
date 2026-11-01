@@ -85,19 +85,33 @@ Every generated page in `docs/test-report/*.png` was inspected. The inspection c
 `ptd-backend --self-test scanned_exam.pdf`, run with an empty environment
 (`env -i`, no Python): **status=succeeded, pages=2**. OCR ran from the bundled models.
 
-## 6. Windows (GitHub Actions)
+## 6. Windows (GitHub Actions) — clean `windows-latest` VM
 
-See the latest run of `.github/workflows/windows-build.yml` for the live result and artifacts.
-Results of the runs made for this release are recorded below.
+Run [#4](https://github.com/jabborovmuxammadrizo-tech/For_claud/actions/runs/41280568101) of
+`.github/workflows/windows-build.yml` (commit `62a0b71`), **all steps green**:
 
 | Step | Result |
 |---|---|
-| Backend suite on Windows | see below |
-| PyInstaller engine + self-test without Python | see below |
-| NSIS installer, silent install to Program Files | see below |
-| Explorer registry entries (PDF, DOCX, folder, images; command line; Open-with) | see below |
-| Right-click command lines: Uzbek name (app closed), multi-select (app running), long name, folder | see below |
-| Silent uninstall: registry removed, user documents kept | see below |
+| Backend suite on Windows (Python 3.13) | ✅ 65 passed |
+| PyInstaller engine; self-test with `PATH` reduced to `C:\Windows` (scanned PDF with OCR, DOCX) | ✅ succeeded |
+| electron-builder: `PDF_Test_Designer_Setup.exe` (277 MB), `PDF_Test_Designer_Portable.zip` (346 MB), `PDF_Test_Designer_Standalone.exe` (277 MB) | ✅ built |
+| Silent install (`/S`) to `C:\Program Files\PDF Test Designer`, engine present in `resources\backend` | ✅ |
+| Registry: PDF (12 entries), DOCX (9), folders (4), PNG/JPG/TIFF (5 each); exact command line; *Open with* ProgID | ✅ |
+| Right-click, app closed: `Oʻquvchilar uchun test — 1-chorak.pdf` → `…_Formatted.pdf` | ✅ in ~6 s |
+| Right-click multi-select while running (DOCX + PDF) → one task, both PDFs | ✅ |
+| Right-click *Compress PDF* on a ~150-character file name | ✅ |
+| Right-click on a folder → `Explorer test - Generated …\` with 3 PDFs (subfolder excluded by default) | ✅ |
+| Originals unchanged (SHA-256 compared) | ✅ |
+| Silent uninstall: PDF and folder menu keys removed; `Documents\PDF Test Designer` kept | ✅ |
+
+The Windows runs also uncovered three real bugs, all fixed and covered by tests:
+1. PyMuPDF is not thread-safe. All calls to it now go through one lock.
+2. Windows refuses to rename a file over one that another job has open. The cache now keeps the
+   existing identical file instead of failing.
+3. Very long names lost their `_Formatted`/`_Compressed` suffix when shortened. Now only the
+   original-name part is shortened.
+
+The installers are downloadable from the run's **Artifacts** section (kept for 90 days).
 
 ## 7. Not verified in this environment
 
