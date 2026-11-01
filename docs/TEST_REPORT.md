@@ -107,3 +107,13 @@ Results of the runs made for this release are recorded below.
 * **The top-level Windows 11 context menu (IExplorerCommand)** — not implemented; it requires a
   code-signed sparse MSIX package (see `docs/WINDOWS_INTEGRATION.md`).
 * **Code signing** — the installer is unsigned, so SmartScreen will warn on first run.
+
+## 8. Known limitations (by design in 1.0)
+
+* **Text does not wrap around images.** Images are placed in the flow, between text blocks, with
+  size and alignment control. They can also be placed freely as page overlays.
+* **Mode B (original pages) works for PDF and image files.** A DOCX cannot be rendered page-faithfully
+  without Microsoft Word, so DOCX files are imported as editable content, and the app says so.
+* **OCR accuracy depends on the scan.** Scanned documents are always flagged for proofreading.
+* **Legacy `.doc` and EMF/WMF images inside DOCX are not converted.** The user is told to re-save
+  them as `.docx` / PNG.
