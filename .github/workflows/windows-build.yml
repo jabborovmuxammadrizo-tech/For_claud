@@ -125,7 +125,12 @@ jobs:
           Wait-For '*_Compressed.pdf' 240 | Out-Null
           # 4. folder with sub-folder
           Invoke-Verb 'batch-generate' "$env:RUNNER_TEMP\Explorer test"
-          Start-Sleep 20
+          $ok = $false
+          for ($i = 0; $i -lt 240 -and -not $ok; $i++) {
+            $d = Get-ChildItem -LiteralPath $out -Directory -Filter 'Explorer test - Generated*' -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($d -and (Get-ChildItem -LiteralPath $d.FullName -Filter '*_Formatted.pdf').Count -ge 3) { $ok = $true } else { Start-Sleep 1 }
+          }
+          if (-not $ok) { throw "folder batch did not produce 3 PDFs" }
           Get-ChildItem -LiteralPath $out -Recurse -File | Where-Object { $_.Extension -eq '.pdf' } | Format-Table FullName, Length
           # originals are never modified
           if ((Get-FileHash "$env:RUNNER_TEMP\fx\one_page_exam.pdf").Hash -ne (Get-FileHash "$env:RUNNER_TEMP\Explorer test\Oʻquvchilar uchun test — 1-chorak.pdf").Hash) { throw "original changed" }

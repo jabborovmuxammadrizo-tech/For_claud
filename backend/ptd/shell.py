@@ -84,7 +84,9 @@ def output_name(svc: "Service", src_stem: str, template_name: str = "", ext: str
     pattern = st["output_pattern"] if st["output_naming"] == "custom" else NAMING.get(st["output_naming"], "{name}_Formatted")
     if suffix is not None:
         pattern = "{name}_" + suffix
-    base = (pattern.replace("{name}", src_stem).replace("{template}", template_name)
+    # shorten the original name, never the suffix: keeps names recognisable and paths under MAX_PATH
+    stem = src_stem if len(src_stem) <= 90 else src_stem[:89].rstrip(" ._-") + "…"
+    base = (pattern.replace("{name}", stem).replace("{template}", template_name[:40])
             .replace("{date}", time.strftime("%Y-%m-%d")).replace("{time}", time.strftime("%H%M")))
     return windows_safe(base) + ext
 

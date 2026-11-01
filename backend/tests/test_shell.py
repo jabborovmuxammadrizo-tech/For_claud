@@ -47,7 +47,10 @@ def test_very_long_filename(svc, fx, tmp_path, out):
     shutil.copy(fx["one_page"][0], src)
     b = wait_task(svc, SH.run(svc, "generate-default", [str(src)]))
     assert b["jobs"][0]["status"] == "succeeded"
-    assert len(Path(b["jobs"][0]["result"]["outputs"]["delivered"]).name) <= 160
+    name = Path(b["jobs"][0]["result"]["outputs"]["delivered"]).name
+    assert len(name) <= 120 and name.endswith("…_Formatted.pdf") and name.startswith("Juda uzun nomli")
+    comp = wait_task(svc, SH.run(svc, "compress", [str(src)]))["jobs"][0]
+    assert Path(comp["result"]["delivered"][0]).name.endswith("_Compressed.pdf")
 
 
 def test_mixed_multi_select_batch_with_template_and_zip(svc, fx, out):
