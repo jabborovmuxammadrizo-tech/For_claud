@@ -28,11 +28,11 @@ class Store:
 
     # ------------------------------------------------------------------ assets
     def save_asset_bytes(self, data: bytes, ext: str, kind: str = "image", name: str | None = None,
-                         document_id: str | None = None, meta: dict | None = None) -> dict:
+                         document_id: str | None = None, meta: dict | None = None, aid: str | None = None) -> dict:
         ext = "." + ext.lower().lstrip(".")
         if ext == ".jpeg":
             ext = ".jpg"
-        aid = new_id("as_")
+        aid = aid or new_id("as_")
         sub = ASSET_DIRS.get(kind, "Images")
         folder = self.paths.sub(sub) / (document_id or "library")
         path = unique_path(folder, safe_filename(f"{name or aid}{ext}", default=aid + ext))
@@ -364,16 +364,30 @@ class Store:
 
     # ------------------------------------------------------------------ seed
     def seed(self) -> None:
+        logo = self._seed_logo()
         if not self.db.one("SELECT id FROM branding_profiles LIMIT 1"):
-            self.save_branding("Mirzo Ulugbek NTM (demo)", T.DEFAULT_BRANDING)
+            self.save_branding("Mirzo Ulugbek NTM (demo)", {**T.DEFAULT_BRANDING, "logo_asset": logo})
         if not self.db.one("SELECT id FROM templates WHERE builtin=1 LIMIT 1"):
             for i, spec in enumerate(T.BUILTIN):
                 spec = dict(spec)
                 is_def = spec.pop("is_default", False)
                 cfg = T.normalize(spec)
+                cfg["branding"]["logo_asset"] = logo
                 tid = f"tpl_builtin_{i + 1:02d}"
                 self.db.insert("templates", {"id": tid, "name": cfg["name"], "category": cfg["category"],
                                              "description": cfg.get("description", ""), "config": cfg,
                                              "is_default": 1 if is_def else 0, "builtin": 1,
                                              "created": now() + i * 1e-3, "updated": now()})
                 write_json_atomic(self.paths.sub("Templates") / f"{tid}.json", cfg)
+
+    def _seed_logo(self) -> str | None:
+        """Demo organization logo (vector) shipped with the application; editable like any asset."""
+        aid = "as_default_logo"
+        if self.db.get("assets", aid):
+            return aid
+        from .config import resource_dir
+        src = resource_dir() / "branding" / "mirzo-ulugbek-logo.svg"
+        if not src.exists():
+            return None
+        self.save_asset_bytes(src.read_bytes(), "svg", "logo", "Mirzo Ulugbek NTM logo", aid=aid)
+        return aid

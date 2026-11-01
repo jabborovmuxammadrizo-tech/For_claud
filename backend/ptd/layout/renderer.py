@@ -683,7 +683,9 @@ class Furniture:
         self.c = ctx
         self.t = ctx.t
 
-    def _logo(self, canv, asset, x, y, max_w, max_h, anchor="left"):
+    def _logo(self, canv, asset, x, y, max_w, max_h, anchor="left", badge=False):
+        """Draw a logo fitted into max_w x max_h. On dark bands (badge=True) it sits on a white badge
+        so dark-on-white logos stay legible."""
         if not asset:
             return 0
         p = self.c.resolve(asset)
@@ -691,29 +693,44 @@ class Furniture:
             self.c.issues.append({"level": "warning", "code": "missing_logo", "message": "The template logo file is missing."})
             return 0
         p = Path(p)
+        pad = 0.12 if badge else 0.0
+        inner_w, inner_h = max_w * (1 - 2 * pad), max_h * (1 - 2 * pad)
         if p.suffix.lower() == ".svg":
-            from reportlab.graphics import renderPDF
             from svglib.svglib import svg2rlg
             d = svg2rlg(str(p))
-            s = min(max_w / max(d.width, 1), max_h / max(d.height, 1))
-            w = d.width * s
-            xx = x - w if anchor == "right" else x - w / 2 if anchor == "center" else x
+            iw, ih = max(d.width, 1), max(d.height, 1)
+        else:
+            info = imgs.probe(p)
+            iw, ih = max(info["width"], 1), max(info["height"], 1)
+        s = min(inner_w / iw, inner_h / ih)
+        w, h = iw * s, ih * s
+        bw, bh = (w / (1 - 2 * pad), h / (1 - 2 * pad)) if badge else (w, h)
+        bx = x - bw if anchor == "right" else x - bw / 2 if anchor == "center" else x
+        by = y + (max_h - bh) / 2
+        if badge:
             canv.saveState()
-            canv.translate(xx, y)
+            canv.setFillColor(colors.white)
+            if abs(iw - ih) / max(iw, ih) < 0.15:
+                r = max(bw, bh) / 2
+                canv.circle(bx + bw / 2, by + bh / 2, r, stroke=0, fill=1)
+            else:
+                canv.roundRect(bx, by, bw, bh, min(bw, bh) * 0.18, stroke=0, fill=1)
+            canv.restoreState()
+        lx, ly = bx + (bw - w) / 2, by + (bh - h) / 2
+        if p.suffix.lower() == ".svg":
+            from reportlab.graphics import renderPDF
+            canv.saveState()
+            canv.translate(lx, ly)
             canv.scale(s, s)
             renderPDF.draw(d, canv, 0, 0)
             canv.restoreState()
-            return w
-        info = imgs.probe(p)
-        s = min(max_w / max(info["width"], 1), max_h / max(info["height"], 1))
-        w, h = info["width"] * s, info["height"] * s
+            return bw
         prepared, pinfo = imgs.prepare_for_pdf(p, self.c.cache, w, h, self.c.quality, self.c.gray)
         if pinfo["effective_dpi"] < 150 and not any(i["code"] == "low_resolution_logo" for i in self.c.issues):
             self.c.issues.append({"level": "warning", "code": "low_resolution_logo",
                                   "message": f"The logo is low resolution ({pinfo['effective_dpi']} dpi at printed size). Upload a larger PNG or an SVG for sharp printing."})
-        xx = x - w if anchor == "right" else x - w / 2 if anchor == "center" else x
-        canv.drawImage(str(prepared), xx, y + (max_h - h) / 2, w, h, mask="auto")
-        return w
+        canv.drawImage(str(prepared), lx, ly, w, h, mask="auto")
+        return bw
 
     def background(self, canv, doc):
         c = self.c
@@ -788,7 +805,7 @@ class Furniture:
             tc = c.c_secondary
         x = c.ml
         if h["show_logo"] and b.get("logo_asset"):
-            x += self._logo(canv, b["logo_asset"], x, y0, 30 * mm, hh) + 3 * mm
+            x += self._logo(canv, b["logo_asset"], x, y0, 30 * mm, hh, badge=h["style"] == "band") + 3 * mm
         canv.setFillColor(tc)
         if h["show_org"]:
             canv.setFont(c.head["bold"], 11.5)
@@ -799,7 +816,7 @@ class Furniture:
                                                             c.body["regular"], 7.5, c.W * 0.45))
         right = c.W - c.mr
         if b.get("secondary_logo_asset"):
-            right -= self._logo(canv, b["secondary_logo_asset"], right, y0, 24 * mm, hh, "right") + 3 * mm
+            right -= self._logo(canv, b["secondary_logo_asset"], right, y0, 24 * mm, hh, "right", badge=h["style"] == "band") + 3 * mm
         if h["show_title"] and title:
             canv.setFont(c.body["bold"], 9.5)
             canv.drawRightString(right, y0 + hh * 0.55, self._fit(title, c.body["bold"], 9.5, c.W * 0.4))
@@ -891,7 +908,7 @@ class Furniture:
             tcol = c.c_secondary
             logo_y = H * 0.78
         if cv["show_logo"] and b.get("logo_asset"):
-            self._logo(canv, b["logo_asset"], W / 2, logo_y, 46 * mm, 30 * mm, "center")
+            self._logo(canv, b["logo_asset"], W / 2, logo_y, 46 * mm, 30 * mm, "center", badge=style == "band")
         canv.setFillColor(tcol)
         size = 20
         org = b.get("org_name", "")

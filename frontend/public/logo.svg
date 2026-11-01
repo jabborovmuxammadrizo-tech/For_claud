@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="500" height="500" viewBox="0 0 500 500">
+  <title>MIRZO ULUGBEK NTM</title>
+  <path d="M 449.0 172.6 A 212 212 0 1 0 462.0 250.0" fill="none" stroke="#2525D9" stroke-width="40" stroke-linecap="butt"/>
+  <rect x="288" y="222" width="194" height="32" fill="#2525D9"/>
+  <path d="M 165 128 L 200 128 L 200 300 A 50 50 0 0 0 300 300 L 300 150 L 335 150 L 335 300 A 85 85 0 0 1 165 300 Z" fill="#2525D9"/>
+  <path fill="#E2261C" fill-rule="evenodd" d="M 205 150 L 262 150 C 292 150 302 170 302 195 C 302 214 294 227 282 234 C 300 242 307 260 307 284 C 307 316 291 336 260 336 L 205 336 Z M 233 176 L 257 176 C 270 176 275 185 275 196 C 275 208 268 218 256 218 L 233 218 Z M 233 250 L 259 250 C 273 250 279 262 279 283 C 279 302 272 310 258 310 L 233 310 Z"/>
+</svg>
